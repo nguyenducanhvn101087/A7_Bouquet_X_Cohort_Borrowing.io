@@ -1,0 +1,37 @@
+model
+{
+    for (jj in 1:Nexch) {
+        mu[jj] ~ dnorm(mu.mean[jj], mu.prec[jj])
+        prior.tau.prec[jj] <- pow(tau.HN.scale[jj], -2)
+        tau[jj] ~ dnorm(0.00000E+00, prior.tau.prec[jj])
+        I(0.001, )
+        prec.tau[jj] <- pow(tau[jj], -2)
+    }
+    for (jj in 1:Nexch) {
+        for (j in 1:Nstrata) {
+            re[jj, j] ~ dnorm(0.00000E+00, prec.tau[jj])
+            LogOdds[jj, j] <- mu[jj] + re[jj, j]
+        }
+    }
+    for (j in 1:Nstrata) {
+        LogOdds[Nmix, j] ~ dnorm(nex.mean, nex.prec)
+    }
+    for (j in 1:Nstrata) {
+        exch.index[j] ~ dcat(pMix[1:Nmix])
+        for (jj in 1:Nmix) {
+            exch[j, jj] <- equals(exch.index[j], jj)
+        }
+    }
+    for (j in 1:Nstrata) {
+        theta[j] <- LogOdds[exch.index[j], j]
+    }
+    for (i in 1:Nstrata) {
+        logit(p[i]) <- theta[i]
+        p.success[i] <- step(p[i] - p.cut)
+        r[i] ~ dbin(p[i], n[i])
+    }
+    for (i in 1:Nstrata) {
+        r_fa[i] ~ dbin(p[i], n_fa[i])
+        p.success_fa[i] <- step(r_fa[i]/n_fa[i] - p.cut)
+    }
+}

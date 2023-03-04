@@ -1,0 +1,370 @@
+---
+title: "Bouquet - Borrowing X-cohort" 
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+author: "Anh Nguyen Duc"
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    to_depth: 5
+    collapsed: false
+    smooth_scroll: false
+    number_sections: true
+    theme: united
+    self_contained: false
+  word_document: default
+header-includes: \usepackage{docmute}
+classoption: landscape
+---
+
+```{r setup, include=FALSE}
+remove(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+# Load packages ----------------------------------------------------------------
+require(tidyverse)
+require(knitr)
+require(R2WinBUGS)
+require(pbugs) # parallel winbugs
+require(R2jags)# parallel already supported
+require(coda)  # nice mcmc utilities
+require(mcmcplots) # nice mcmc utilities
+# require(ggplot2)
+# require(bayesplot)
+require(readxl)
+require(kableExtra)
+```
+
+## WinBUGs model for binary EXNEX model with stochastic mixture weights
+
+This is based on section 5.3 of https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1002%2Fpst.1730&file=pst1730-sup-0001-supplementary.pdf 
+
+Original paper is https://onlinelibrary.wiley.com/doi/epdf/10.1002/pst.1730
+
+```{r echo=TRUE}
+
+### Model definition 
+binary_exnex_model2 <- function() {
+## Data to be specify in the input
+#-------------------------------------------------------------------------------
+
+# Nexch        - number of exchangeable components
+# Nmix         - number of mixture weights and must be Nexch+1
+# Nstrata      - number of strata e.g. studies or cohort (in platform trial)
+# pMix         - vector of Nmix mixture weights (summing up to 1)
+# n            - vector of Nstrata elements storing patient numbers for each stratum
+# r            - vector of Nstrata elements storing response numbers for each stratum
+# n_fa         - vector of Nstrata elements storing patient numbers for each stratum at final analysis
+# mu.mean      - vector of Nexch prior mean(s)
+# mu.prec      - vector of Nexch prior precision(s)
+# tau.HN.scale - scale parameter of Half-Normal prior for tau
+# nex.mean     - prior mean for non-exchangeable component
+# nex.prec     - prior precision for non-exchangeable component
+# p.cut        - clinically relevant threshold for response rate to compare against
+  
+## Parameter(s) to be monitored
+# p            - posterior response rate
+# p.success    - posterior indicator if p > p.cut
+# pMix         - posterior mixture weight to test for "exchangeability"
+# p.success_fa - posterior indicator if r_fa/n_fa > p.cut
+#-------------------------------------------------------------------------------
+  
+  # prior distributions for EX-parameters
+  for (jj in 1:Nexch) {
+    mu[jj] ~dnorm(mu.mean[jj],mu.prec[jj])
+    prior.tau.prec[jj] <- pow(tau.HN.scale[jj],-2)
+    tau[jj] ~ dnorm(0,prior.tau.prec[jj]);I(0.001,)
+    prec.tau[jj] <- pow(tau[jj],-2)
+  }
+  
+  # log-odds parameters under EX
+  for (jj in 1:Nexch) {
+    for (j in 1:Nstrata) {
+      re[jj,j] ~ dnorm(0,prec.tau[jj])
+      LogOdds[jj,j] <- mu[jj]+re[jj,j]
+    }
+  }
+  
+  # log-odds parameters under NEX
+  for (j in 1:Nstrata) {
+    LogOdds[Nmix,j] ~ dnorm(nex.mean,nex.prec)
+  }
+  
+  # latent mixture indicators:
+  # exch.index: categorial 1,...,Nmix=Nexch+1
+  # exch: Nstrata x Nmix matrix of 0/1 elements
+  for (j in 1:Nstrata) {
+    exch.index[j] ~ dcat(pMix[1:Nmix])
+    for (jj in 1:Nmix) {
+      exch[j,jj] <- equals(exch.index[j],jj)
+    }
+  }
+  
+  # pick theta
+  for (j in 1:Nstrata) {
+    theta[j] <- LogOdds[exch.index[j],j]
+  }
+  
+  # likelihood part
+  for (i in 1:Nstrata) {
+    logit( p[i] ) <- theta[i]
+    p.success[i]  <- step(p[i]-p.cut)
+    r[i] ~ dbin(p[i],n[i])
+  }
+  
+  # un normalized mixture weights
+  for (j in 1:Nmix) {
+    pMix0[j] ~ dbeta(2, 2)
+  }
+
+  for (j in 1:Nmix) {
+    pMix[j] <- pMix0[j] / sum(pMix0)
+  }
+
+  # predictive part
+  for (i in 1:Nstrata) {  
+    r_fa[i] ~ dbin(p[i], n_fa[i])
+    p.success_fa[i]  <- step(r_fa[i]/n_fa[i]-p.cut)
+  }
+  
+} # end of binary_exnex_model2
+
+write.model(binary_exnex_model2, 'binary_exnex_model2.bug')
+
+### Parameters to monitor
+parameters_binary_exnex_model2 <- c('p', 'pMix', 'p.success', 'p.success_fa')
+
+### Data
+n <- c(20, 21, 19)
+r <- c( 5,  3,  3)
+
+## EX part
+mu.mean <- c(logit(.05), logit(.15)) # ex prior for hyper meanis centered at logit(0.05)
+# ex precision  for hyperpar mean based on (23) of https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1002%2Fpst.1730&file=pst1730-sup-0001-supplementary.pdf
+mu.prec <- 1/sqrt( 1/inv.logit(mu.mean) + 1/(1-inv.logit(mu.mean)) ) # still missing s^2 but this would only make the prior more non-informative
+tau.HN.scale <- c(1,1)
+
+## NEX part
+nex.mean<-logit(.05) # prior mean for nex part
+
+# prior precision for nex part based on (20) of https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1002%2Fpst.1730&file=pst1730-sup-0001-supplementary.pdf
+nex.prec <- 1/sqrt( 1/inv.logit(nex.mean) + 1/(1-inv.logit(nex.mean)) ) 
+
+p.cut<-.15
+
+pMix<-c(1,0,0)
+
+Nstrata <- n %>% length
+Nexch   <- mu.mean %>% length
+Nmix    <- Nexch + 1
+
+n_fa <- c(50, 50, 50)
+
+data_binary_exnex_model2 <- list(Nexch=Nexch, Nmix=Nmix, 
+                                 Nstrata=Nstrata,
+                                 n=n, r=r, n_fa=n_fa,
+                                 mu.mean=mu.mean, mu.prec=mu.prec,
+                                 tau.HN.scale=tau.HN.scale,
+                                 nex.mean=nex.mean, nex.prec=nex.prec, 
+                                 p.cut=p.cut
+                                )
+
+### Inits
+inits_binary_exnex_model2 <- function() {
+
+  list(
+    "mu"=rnorm(Nexch),
+    "tau"=rnorm(Nexch) %>% abs,
+    "pMix0"= rbeta(Nmix, 2, 2)
+    )  
+} # end of inits_binary_exnex_model
+
+### Run MCMC
+
+# JAGS
+set.seed(36)
+binary_exnex_jag2 <- jags(data = data_binary_exnex_model2, 
+                          inits = inits_binary_exnex_model2, 
+                          parameters.to.save = parameters_binary_exnex_model2,
+                          model.file = "binary_exnex_model2.bug",
+                          n.chains=3, n.iter=1e4, n.burnin=5e3)
+print(binary_exnex_jag2)
+
+binary_exnex_mcmc2 <- binary_exnex_jag2 %>% as.mcmc.rjags
+binary_exnex_mcmc2 %>% summary
+binary_exnex_mcmc2 %>% plot
+
+```
+
+
+## WinBUGs model for binary EXNEX model with fixed mixture weights
+
+This is based on section 5.3 of https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1002%2Fpst.1730&file=pst1730-sup-0001-supplementary.pdf 
+
+Original paper is https://onlinelibrary.wiley.com/doi/epdf/10.1002/pst.1730
+
+```{r echo=TRUE}
+
+### Model definition 
+binary_exnex_model <- function() {
+## Data to be specify in the input
+#-------------------------------------------------------------------------------
+
+# Nexch        - number of exchangeable components
+# Nmix         - number of mixture weights and must be Nexch+1
+# Nstrata      - number of strata e.g. studies or cohort (in platform trial)
+# pMix         - vector of Nmix mixture weights (summing up to 1)
+# n            - vector of Nstrata elements storing patient numbers for each stratum
+# r            - vector of Nstrata elements storing response numbers for each stratum
+# n_fa         - vector of Nstrata elements storing patient numbers for each stratum at final analysis  
+# mu.mean      - vector of Nexch prior mean(s)
+# mu.prec      - vector of Nexch prior precision(s)
+# tau.HN.scale - scale parameter of Half-Normal prior for tau
+# nex.mean     - prior mean for non-exchangeable component
+# nex.prec     - prior precision for non-exchangeable component
+# p.cut        - clinically relevant threshold for response rate to compare against
+  
+## Parameter(s) to be monitored
+# p            - posterior response rate
+# p.success    - posterior indicator if p > p.cut
+# p.success_fa - posterior indicator if r_fa/n_fa > p.cut
+#-------------------------------------------------------------------------------
+  
+  # prior distributions for EX-parameters
+  for (jj in 1:Nexch) {
+    mu[jj] ~dnorm(mu.mean[jj],mu.prec[jj])
+    prior.tau.prec[jj] <- pow(tau.HN.scale[jj],-2)
+    tau[jj] ~ dnorm(0,prior.tau.prec[jj]);I(0.001,)
+    prec.tau[jj] <- pow(tau[jj],-2)
+  }
+  
+  # log-odds parameters under EX
+  for (jj in 1:Nexch) {
+    for (j in 1:Nstrata) {
+      re[jj,j] ~ dnorm(0,prec.tau[jj])
+      LogOdds[jj,j] <- mu[jj]+re[jj,j]
+    }
+  }
+  
+  # log-odds parameters under NEX
+  for (j in 1:Nstrata) {
+    LogOdds[Nmix,j] ~ dnorm(nex.mean,nex.prec)
+  }
+  
+  # latent mixture indicators:
+  # exch.index: categorial 1,...,Nmix=Nexch+1
+  # exch: Nstrata x Nmix matrix of 0/1 elements
+  for (j in 1:Nstrata) {
+    exch.index[j] ~ dcat(pMix[1:Nmix])
+    for (jj in 1:Nmix) {
+      exch[j,jj] <- equals(exch.index[j],jj)
+    }
+  }
+  
+  # pick theta
+  for (j in 1:Nstrata) {
+    theta[j] <- LogOdds[exch.index[j],j]
+  }
+  
+  # likelihood part
+  for (i in 1:Nstrata) {
+    logit( p[i] ) <- theta[i]
+    p.success[i]  <- step(p[i]-p.cut)
+    r[i] ~ dbin(p[i],n[i])
+  }
+
+  # predictive part
+  for (i in 1:Nstrata) {  
+    r_fa[i] ~ dbin(p[i], n_fa[i])
+    p.success_fa[i]  <- step(r_fa[i]/n_fa[i]-p.cut)
+  }
+} # end of binary_exnex_model
+
+write.model(binary_exnex_model, 'binary_exnex_model.bug')
+
+### Parameters to monitor
+parameters_binary_exnex_model <- c('p', 'p.success', 'p.success_fa')
+
+### Data
+data_binary_ex_model <-    list(pMix=c(1,0,0), # full exchangeable
+                                Nexch=Nexch, Nmix=Nmix, 
+                                Nstrata=Nstrata,
+                                n_fa=n_fa, n=n, r=r,
+                                mu.mean=mu.mean, mu.prec=mu.prec,
+                                tau.HN.scale=tau.HN.scale,
+                                nex.mean=nex.mean, nex.prec=nex.prec, p.cut=p.cut
+                                )
+
+data_binary_nex_model <-   list(pMix=c(0,0,1), # non-exchangeable
+                                Nexch=Nexch, Nmix=Nmix, 
+                                Nstrata=Nstrata,
+                                n_fa=n_fa, n=n, r=r,
+                                mu.mean=mu.mean, mu.prec=mu.prec,
+                                tau.HN.scale=tau.HN.scale,
+                                nex.mean=nex.mean, nex.prec=nex.prec, p.cut=p.cut
+                                )
+
+
+data_binary_exnex_model <- list(pMix=c(0.5,0,0.5), # exnex
+                                Nexch=Nexch, Nmix=Nmix, 
+                                Nstrata=Nstrata,
+                                n_fa=n_fa, n=n, r=r,
+                                mu.mean=mu.mean, mu.prec=mu.prec,
+                                tau.HN.scale=tau.HN.scale,
+                                nex.mean=nex.mean, nex.prec=nex.prec, p.cut=p.cut
+                                )
+
+### Inits
+inits_binary_exnex_model <- function() {
+
+  list(
+    "mu"=rnorm(Nexch),
+    "tau"=rnorm(Nexch) %>% abs
+    )  
+} # end of inits_binary_exnex_model
+
+### Run MCMC
+
+# JAGS
+set.seed(36)
+binary_exnex_jag <- jags(data = data_binary_exnex_model, 
+                         inits = inits_binary_exnex_model, 
+                         parameters.to.save = parameters_binary_exnex_model,
+                         model.file = "binary_exnex_model.bug",
+                         n.chains=3, n.iter=1e4, n.burnin=5e3)
+print(binary_exnex_jag)
+# plot(binary_exnex_jag)
+
+binary_exnex_mcmc <- binary_exnex_jag %>% as.mcmc.rjags
+binary_exnex_mcmc %>% summary
+binary_exnex_mcmc %>% plot
+
+set.seed(36)
+binary_ex_jag <- jags(data = data_binary_ex_model, 
+                         inits = inits_binary_exnex_model, 
+                         parameters.to.save = parameters_binary_exnex_model,
+                         model.file = "binary_exnex_model.bug",
+                         n.chains=3, n.iter=1e4, n.burnin=5e3)
+print(binary_ex_jag)
+binary_ex_mcmc <- binary_ex_jag %>% as.mcmc.rjags
+binary_ex_mcmc %>% summary
+binary_ex_mcmc %>% plot
+
+set.seed(36)
+binary_nex_jag <- jags(data = data_binary_nex_model, 
+                         inits = inits_binary_exnex_model, 
+                         parameters.to.save = parameters_binary_exnex_model,
+                         model.file = "binary_exnex_model.bug",
+                         n.chains=3, n.iter=1e4, n.burnin=5e3)
+print(binary_nex_jag)
+binary_nex_mcmc <- binary_nex_jag %>% as.mcmc.rjags
+binary_nex_mcmc %>% summary
+binary_nex_mcmc %>% plot
+
+
+### Credible interval for selected parameters
+mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red',)
+mcmcplots::caterplot(binary_exnex_jag, parms = c('p'), add=T, cat.shift=.2, labels.loc=F)
+mcmcplots::caterplot(binary_ex_jag, parms = c('p'), add=T, col='darkgreen', cat.shift=.4, labels.loc=F)
+```
+
+
