@@ -19,7 +19,7 @@ classoption: landscape
 
 ```{r setup, include=FALSE}
 remove(list=ls())
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, autodep=FALSE)
 # Load packages ----------------------------------------------------------------
 require(tidyverse)
 require(knitr)
@@ -40,7 +40,7 @@ This is based on section 5.3 of https://onlinelibrary.wiley.com/action/downloadS
 
 Original paper is https://onlinelibrary.wiley.com/doi/epdf/10.1002/pst.1730
 
-```{r echo=TRUE}
+```{r echo=TRUE, fig.height=10}
 
 ### Model definition 
 binary_exnex_model2 <- function() {
@@ -202,7 +202,7 @@ This is based on section 5.3 of https://onlinelibrary.wiley.com/action/downloadS
 
 Original paper is https://onlinelibrary.wiley.com/doi/epdf/10.1002/pst.1730
 
-```{r echo=TRUE}
+```{r echo=TRUE, fig.height=10}
 
 ### Model definition 
 binary_exnex_model <- function() {
