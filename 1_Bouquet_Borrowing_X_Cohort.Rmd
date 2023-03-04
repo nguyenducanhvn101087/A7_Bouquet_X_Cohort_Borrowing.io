@@ -40,7 +40,7 @@ This is based on section 5.3 of https://onlinelibrary.wiley.com/action/downloadS
 
 Original paper is https://onlinelibrary.wiley.com/doi/epdf/10.1002/pst.1730
 
-```{r echo=TRUE, fig.height=10}
+```{r echo=TRUE, fig.height=8}
 
 ### Model definition 
 binary_exnex_model2 <- function() {
@@ -134,7 +134,7 @@ write.model(binary_exnex_model2, 'binary_exnex_model2.bug')
 parameters_binary_exnex_model2 <- c('p', 'pMix', 'p.success', 'p.success_fa')
 
 ### Data
-n <- c(20, 21, 19)
+n <- c('cobi'=20, 'atz+bev'=21, 'ipat+pac'=19)
 r <- c( 5,  3,  3)
 
 ## EX part
@@ -193,6 +193,7 @@ binary_exnex_mcmc2 <- binary_exnex_jag2 %>% as.mcmc.rjags
 binary_exnex_mcmc2 %>% summary
 binary_exnex_mcmc2 %>% plot
 
+
 ```
 
 
@@ -202,7 +203,7 @@ This is based on section 5.3 of https://onlinelibrary.wiley.com/action/downloadS
 
 Original paper is https://onlinelibrary.wiley.com/doi/epdf/10.1002/pst.1730
 
-```{r echo=TRUE, fig.height=10}
+```{r echo=TRUE, fig.height=8}
 
 ### Model definition 
 binary_exnex_model <- function() {
@@ -360,11 +361,13 @@ binary_nex_mcmc <- binary_nex_jag %>% as.mcmc.rjags
 binary_nex_mcmc %>% summary
 binary_nex_mcmc %>% plot
 
-
-### Credible interval for selected parameters
-mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red',)
-mcmcplots::caterplot(binary_exnex_jag, parms = c('p'), add=T, cat.shift=.2, labels.loc=F)
-mcmcplots::caterplot(binary_ex_jag, parms = c('p'), add=T, col='darkgreen', cat.shift=.4, labels.loc=F)
 ```
 
+## Credible interval for posterior distribution of "true" response rate
 
+```{r echo=TRUE}
+### Credible interval for selected parameters
+mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red', labels=n%>%names, cat.shift=-.2)
+mcmcplots::caterplot(binary_exnex_jag2, parms = c('p'), add=T, cat.shift=0, labels.loc=F)
+mcmcplots::caterplot(binary_ex_jag, parms = c('p'), add=T, col='darkgreen', cat.shift=.2, labels.loc=F)
+```

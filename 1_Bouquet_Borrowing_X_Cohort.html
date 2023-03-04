@@ -354,7 +354,7 @@ write.model(binary_exnex_model2, &#39;binary_exnex_model2.bug&#39;)
 parameters_binary_exnex_model2 &lt;- c(&#39;p&#39;, &#39;pMix&#39;, &#39;p.success&#39;, &#39;p.success_fa&#39;)
 
 ### Data
-n &lt;- c(20, 21, 19)
+n &lt;- c(&#39;cobi&#39;=20, &#39;atz+bev&#39;=21, &#39;ipat+pac&#39;=19)
 r &lt;- c( 5,  3,  3)
 
 ## EX part
@@ -846,11 +846,17 @@ binary_nex_mcmc %&gt;% summary</code></pre>
 ## p.success_fa[3] 0.00000  0.00000  0.0000  1.0000  1.0000</code></pre>
 <pre class="r"><code>binary_nex_mcmc %&gt;% plot</code></pre>
 <p><img src="1_Bouquet_Borrowing_X_Cohort_files/figure-html/unnamed-chunk-2-9.png" width="672" /><img src="1_Bouquet_Borrowing_X_Cohort_files/figure-html/unnamed-chunk-2-10.png" width="672" /><img src="1_Bouquet_Borrowing_X_Cohort_files/figure-html/unnamed-chunk-2-11.png" width="672" /><img src="1_Bouquet_Borrowing_X_Cohort_files/figure-html/unnamed-chunk-2-12.png" width="672" /></p>
+</div>
+<div
+id="credible-interval-for-posterior-distribution-of-true-response-rate"
+class="section level2" number="0.3">
+<h2><span class="header-section-number">0.3</span> Credible interval for
+posterior distribution of “true” response rate</h2>
 <pre class="r"><code>### Credible interval for selected parameters
-mcmcplots::caterplot(binary_nex_jag, parms = c(&#39;p&#39;), add=F, col=&#39;red&#39;,)
-mcmcplots::caterplot(binary_exnex_jag, parms = c(&#39;p&#39;), add=T, cat.shift=.2, labels.loc=F)
+mcmcplots::caterplot(binary_nex_jag, parms = c(&#39;p&#39;), add=F, col=&#39;red&#39;, labels=n%&gt;%names)
+mcmcplots::caterplot(binary_exnex_jag2, parms = c(&#39;p&#39;), add=T, cat.shift=.2, labels.loc=F)
 mcmcplots::caterplot(binary_ex_jag, parms = c(&#39;p&#39;), add=T, col=&#39;darkgreen&#39;, cat.shift=.4, labels.loc=F)</code></pre>
-<p><img src="1_Bouquet_Borrowing_X_Cohort_files/figure-html/unnamed-chunk-2-13.png" width="672" /></p>
+<p><img src="1_Bouquet_Borrowing_X_Cohort_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
 </div>
 
 
