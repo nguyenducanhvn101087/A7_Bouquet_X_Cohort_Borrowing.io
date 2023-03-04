@@ -17,7 +17,7 @@ model
         LogOdds[Nmix, j] ~ dnorm(nex.mean, nex.prec)
     }
     for (j in 1:Nstrata) {
-        exch.index[j] ~ dcat(pMix[1:Nmix])
+        exch.index[j] ~ dcat(pMix[1:Nmix, j])
         for (jj in 1:Nmix) {
             exch[j, jj] <- equals(exch.index[j], jj)
         }
@@ -30,11 +30,13 @@ model
         p.success[i] <- step(p[i] - p.cut)
         r[i] ~ dbin(p[i], n[i])
     }
-    for (j in 1:Nmix) {
-        pMix0[j] ~ dbeta(2, 2)
-    }
-    for (j in 1:Nmix) {
-        pMix[j] <- pMix0[j]/sum(pMix0)
+    for (i in 1:Nstrata) {
+        for (j in 1:Nmix) {
+            pMix0[j, i] ~ dbeta(2, 2)
+        }
+        for (j in 1:Nmix) {
+            pMix[j, i] <- pMix0[j, i]/sum(pMix0[, i])
+        }
     }
     for (i in 1:Nstrata) {
         r_fa[i] ~ dbin(p[i], n_fa[i])

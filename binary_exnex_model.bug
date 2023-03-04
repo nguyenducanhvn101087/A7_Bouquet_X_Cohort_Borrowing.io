@@ -17,7 +17,7 @@ model
         LogOdds[Nmix, j] ~ dnorm(nex.mean, nex.prec)
     }
     for (j in 1:Nstrata) {
-        exch.index[j] ~ dcat(pMix[1:Nmix])
+        exch.index[j] ~ dcat(pMix[1:Nmix, j])
         for (jj in 1:Nmix) {
             exch[j, jj] <- equals(exch.index[j], jj)
         }

@@ -50,7 +50,7 @@ binary_exnex_model2 <- function() {
 # Nexch        - number of exchangeable components
 # Nmix         - number of mixture weights and must be Nexch+1
 # Nstrata      - number of strata e.g. studies or cohort (in platform trial)
-# pMix         - vector of Nmix mixture weights (summing up to 1)
+# pMix         - matrix of Nmix * Nstrata mixture weights (each col summing up to 1)
 # n            - vector of Nstrata elements storing patient numbers for each stratum
 # r            - vector of Nstrata elements storing response numbers for each stratum
 # n_fa         - vector of Nstrata elements storing patient numbers for each stratum at final analysis
@@ -86,14 +86,15 @@ binary_exnex_model2 <- function() {
   
   # log-odds parameters under NEX
   for (j in 1:Nstrata) {
-    LogOdds[Nmix,j] ~ dnorm(nex.mean,nex.prec)
+    #p_Nmix[j] ~ dbeta(2,2) # slight mod to have flat prior
+    LogOdds[Nmix,j] ~ dnorm(nex.mean,nex.prec)#<- logit(p_Nmix[j])#
   }
   
   # latent mixture indicators:
   # exch.index: categorial 1,...,Nmix=Nexch+1
   # exch: Nstrata x Nmix matrix of 0/1 elements
   for (j in 1:Nstrata) {
-    exch.index[j] ~ dcat(pMix[1:Nmix])
+    exch.index[j] ~ dcat(pMix[1:Nmix,j])
     for (jj in 1:Nmix) {
       exch[j,jj] <- equals(exch.index[j],jj)
     }
@@ -111,14 +112,17 @@ binary_exnex_model2 <- function() {
     r[i] ~ dbin(p[i],n[i])
   }
   
-  # un normalized mixture weights
-  for (j in 1:Nmix) {
-    pMix0[j] ~ dbeta(2, 2)
+  # normalized mixture weights
+  for (i in 1:Nstrata) {
+    for (j in 1:Nmix) {
+      pMix0[j,i] ~ dbeta(2, 2)
+    }
+  
+    for (j in 1:Nmix) {
+      pMix[j,i] <- pMix0[j,i] / sum(pMix0[,i])
+    }    
   }
 
-  for (j in 1:Nmix) {
-    pMix[j] <- pMix0[j] / sum(pMix0)
-  }
 
   # predictive part
   for (i in 1:Nstrata) {  
@@ -134,20 +138,20 @@ write.model(binary_exnex_model2, 'binary_exnex_model2.bug')
 parameters_binary_exnex_model2 <- c('p', 'pMix', 'p.success', 'p.success_fa')
 
 ### Data
-n <- c('cobi'=20, 'atz+bev'=21, 'ipat+pac'=19)
-r <- c( 5,  3,  3)
+n <- c('cobi'=19, 'atz+bev'=21, 'ipat+pac'=20)
+r <- c( 3,  3,  5)
 
 ## EX part
 mu.mean <- c(logit(.05), logit(.15)) # ex prior for hyper meanis centered at logit(0.05)
 # ex precision  for hyperpar mean based on (23) of https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1002%2Fpst.1730&file=pst1730-sup-0001-supplementary.pdf
-mu.prec <- 1/sqrt( 1/inv.logit(mu.mean) + 1/(1-inv.logit(mu.mean)) ) # still missing s^2 but this would only make the prior more non-informative
+mu.prec <- 1/sqrt( ( 1/inv.logit(mu.mean) + 1/(1-inv.logit(mu.mean)) )) # still missing s^2 but this would only make the prior more non-informative
 tau.HN.scale <- c(1,1)
 
 ## NEX part
-nex.mean<-logit(.05) # prior mean for nex part
+nex.mean<-logit(.15) # prior mean for nex part
 
 # prior precision for nex part based on (20) of https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1002%2Fpst.1730&file=pst1730-sup-0001-supplementary.pdf
-nex.prec <- 1/sqrt( 1/inv.logit(nex.mean) + 1/(1-inv.logit(nex.mean)) ) 
+nex.prec <- 1/sqrt( 1/inv.logit(nex.mean) + 1/(1-inv.logit(nex.mean))  * 1e5 ) 
 
 p.cut<-.15
 
@@ -174,7 +178,7 @@ inits_binary_exnex_model2 <- function() {
   list(
     "mu"=rnorm(Nexch),
     "tau"=rnorm(Nexch) %>% abs,
-    "pMix0"= rbeta(Nmix, 2, 2)
+    "pMix0"= rbeta(Nmix*Nstrata, 2, 2) %>% matrix(nrow=Nstrata)
     )  
 } # end of inits_binary_exnex_model
 
@@ -191,6 +195,7 @@ print(binary_exnex_jag2)
 
 binary_exnex_mcmc2 <- binary_exnex_jag2 %>% as.mcmc.rjags
 binary_exnex_mcmc2 %>% summary
+binary_exnex_mcmc2 %>% gelman.plot
 binary_exnex_mcmc2 %>% plot
 
 
@@ -213,7 +218,7 @@ binary_exnex_model <- function() {
 # Nexch        - number of exchangeable components
 # Nmix         - number of mixture weights and must be Nexch+1
 # Nstrata      - number of strata e.g. studies or cohort (in platform trial)
-# pMix         - vector of Nmix mixture weights (summing up to 1)
+# pMix         - matrix of Nmix * Nstrata mixture weights (each col summing up to 1)
 # n            - vector of Nstrata elements storing patient numbers for each stratum
 # r            - vector of Nstrata elements storing response numbers for each stratum
 # n_fa         - vector of Nstrata elements storing patient numbers for each stratum at final analysis  
@@ -248,14 +253,15 @@ binary_exnex_model <- function() {
   
   # log-odds parameters under NEX
   for (j in 1:Nstrata) {
-    LogOdds[Nmix,j] ~ dnorm(nex.mean,nex.prec)
+    #p_Nmix[j] ~ dbeta(2,2) # slight mod to have flat prior
+    LogOdds[Nmix,j] ~ dnorm(nex.mean,nex.prec)#<- logit(p_Nmix[j])#
   }
   
   # latent mixture indicators:
   # exch.index: categorial 1,...,Nmix=Nexch+1
   # exch: Nstrata x Nmix matrix of 0/1 elements
   for (j in 1:Nstrata) {
-    exch.index[j] ~ dcat(pMix[1:Nmix])
+    exch.index[j] ~ dcat(pMix[1:Nmix,j])
     for (jj in 1:Nmix) {
       exch[j,jj] <- equals(exch.index[j],jj)
     }
@@ -286,7 +292,8 @@ write.model(binary_exnex_model, 'binary_exnex_model.bug')
 parameters_binary_exnex_model <- c('p', 'p.success', 'p.success_fa')
 
 ### Data
-data_binary_ex_model <-    list(pMix=c(1,0,0), # full exchangeable
+data_binary_ex_model <-    list(pMix=cbind(c(1,0,0), c(1,0,0), c(1,0,0)), 
+                                # full exchangeable
                                 Nexch=Nexch, Nmix=Nmix, 
                                 Nstrata=Nstrata,
                                 n_fa=n_fa, n=n, r=r,
@@ -295,17 +302,8 @@ data_binary_ex_model <-    list(pMix=c(1,0,0), # full exchangeable
                                 nex.mean=nex.mean, nex.prec=nex.prec, p.cut=p.cut
                                 )
 
-data_binary_nex_model <-   list(pMix=c(0,0,1), # non-exchangeable
-                                Nexch=Nexch, Nmix=Nmix, 
-                                Nstrata=Nstrata,
-                                n_fa=n_fa, n=n, r=r,
-                                mu.mean=mu.mean, mu.prec=mu.prec,
-                                tau.HN.scale=tau.HN.scale,
-                                nex.mean=nex.mean, nex.prec=nex.prec, p.cut=p.cut
-                                )
-
-
-data_binary_exnex_model <- list(pMix=c(0.5,0,0.5), # exnex
+data_binary_nex_model <-   list(pMix=cbind(c(0,0,1), c(0,0,1), c(0,0,1)), 
+                                # non-exchangeable
                                 Nexch=Nexch, Nmix=Nmix, 
                                 Nstrata=Nstrata,
                                 n_fa=n_fa, n=n, r=r,
@@ -327,19 +325,6 @@ inits_binary_exnex_model <- function() {
 
 # JAGS
 set.seed(36)
-binary_exnex_jag <- jags(data = data_binary_exnex_model, 
-                         inits = inits_binary_exnex_model, 
-                         parameters.to.save = parameters_binary_exnex_model,
-                         model.file = "binary_exnex_model.bug",
-                         n.chains=3, n.iter=1e4, n.burnin=5e3)
-print(binary_exnex_jag)
-# plot(binary_exnex_jag)
-
-binary_exnex_mcmc <- binary_exnex_jag %>% as.mcmc.rjags
-binary_exnex_mcmc %>% summary
-binary_exnex_mcmc %>% plot
-
-set.seed(36)
 binary_ex_jag <- jags(data = data_binary_ex_model, 
                          inits = inits_binary_exnex_model, 
                          parameters.to.save = parameters_binary_exnex_model,
@@ -348,6 +333,7 @@ binary_ex_jag <- jags(data = data_binary_ex_model,
 print(binary_ex_jag)
 binary_ex_mcmc <- binary_ex_jag %>% as.mcmc.rjags
 binary_ex_mcmc %>% summary
+binary_ex_mcmc %>% gelman.plot
 binary_ex_mcmc %>% plot
 
 set.seed(36)
@@ -359,6 +345,7 @@ binary_nex_jag <- jags(data = data_binary_nex_model,
 print(binary_nex_jag)
 binary_nex_mcmc <- binary_nex_jag %>% as.mcmc.rjags
 binary_nex_mcmc %>% summary
+binary_nex_mcmc %>% gelman.plot
 binary_nex_mcmc %>% plot
 
 ```
@@ -367,7 +354,8 @@ binary_nex_mcmc %>% plot
 
 ```{r echo=TRUE}
 ### Credible interval for selected parameters
-mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red', labels=n%>%names, cat.shift=-.2)
-mcmcplots::caterplot(binary_exnex_jag2, parms = c('p'), add=T, cat.shift=0, labels.loc=F)
-mcmcplots::caterplot(binary_ex_jag, parms = c('p'), add=T, col='darkgreen', cat.shift=.2, labels.loc=F)
+mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red', labels=n%>%names, cat.shift=-.2, reorder = F)
+mcmcplots::caterplot(binary_exnex_jag2, parms = c('p'), add=T, cat.shift=0, labels.loc=F, reorder = F)
+mcmcplots::caterplot(binary_ex_jag, parms = c('p'), add=T, col='darkgreen', cat.shift=.2, labels.loc=F, reorder = F)
+legend(x=.35, y=1, lty=1, lwd=2, col=c('red', 'blue', 'darkgreen'), legend=c('nex', 'exnex', 'fully ex'))
 ```
