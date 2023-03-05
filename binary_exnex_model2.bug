@@ -40,6 +40,7 @@ model
     }
     for (i in 1:Nstrata) {
         r_fa[i] ~ dbin(p[i], n_fa[i])
-        p.success_fa[i] <- step(r_fa[i]/n_fa[i] - p.cut)
+        p.fa[i] <- r_fa[i]/n_fa[i]
+        p.success_fa[i] <- step(p.fa[i] - p.cut)
     }
 }

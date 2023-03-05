@@ -64,8 +64,9 @@ binary_exnex_model2 <- function() {
 ## Parameter(s) to be monitored
 # p            - posterior response rate
 # p.success    - posterior indicator if p > p.cut
+# p.fa         - posterior predictive observed response rate at FA
 # pMix         - posterior mixture weight to test for "exchangeability"
-# p.success_fa - posterior indicator if r_fa/n_fa > p.cut
+# p.success_fa - posterior predictive indicator if r_fa/n_fa > p.cut
 #-------------------------------------------------------------------------------
   
   # prior distributions for EX-parameters
@@ -123,11 +124,11 @@ binary_exnex_model2 <- function() {
     }    
   }
 
-
   # predictive part
   for (i in 1:Nstrata) {  
     r_fa[i] ~ dbin(p[i], n_fa[i])
-    p.success_fa[i]  <- step(r_fa[i]/n_fa[i]-p.cut)
+    p.fa[i] <- r_fa[i]/n_fa[i]
+    p.success_fa[i]  <- step(p.fa[i]-p.cut)
   }
   
 } # end of binary_exnex_model2
@@ -135,7 +136,7 @@ binary_exnex_model2 <- function() {
 write.model(binary_exnex_model2, 'binary_exnex_model2.bug')
 
 ### Parameters to monitor
-parameters_binary_exnex_model2 <- c('p', 'pMix', 'p.success', 'p.success_fa')
+parameters_binary_exnex_model2 <- c('p', 'pMix', 'p.fa', 'p.success', 'p.success_fa')
 
 ### Data
 n <- c('cobi'=19, 'atz+bev'=21, 'ipat+pac'=20)
@@ -231,8 +232,9 @@ binary_exnex_model <- function() {
   
 ## Parameter(s) to be monitored
 # p            - posterior response rate
+# p.fa         - posterior predictive observed response rate at FA  
 # p.success    - posterior indicator if p > p.cut
-# p.success_fa - posterior indicator if r_fa/n_fa > p.cut
+# p.success_fa - posterior predictive indicator if r_fa/n_fa > p.cut
 #-------------------------------------------------------------------------------
   
   # prior distributions for EX-parameters
@@ -282,14 +284,15 @@ binary_exnex_model <- function() {
   # predictive part
   for (i in 1:Nstrata) {  
     r_fa[i] ~ dbin(p[i], n_fa[i])
-    p.success_fa[i]  <- step(r_fa[i]/n_fa[i]-p.cut)
+    p.fa[i] <- r_fa[i]/n_fa[i]
+    p.success_fa[i]  <- step(p.fa[i]-p.cut)
   }
 } # end of binary_exnex_model
 
 write.model(binary_exnex_model, 'binary_exnex_model.bug')
 
 ### Parameters to monitor
-parameters_binary_exnex_model <- c('p', 'p.success', 'p.success_fa')
+parameters_binary_exnex_model <- c('p', 'p.fa', 'p.success', 'p.success_fa')
 
 ### Data
 data_binary_ex_model <-    list(pMix=cbind(c(1,0,0), c(1,0,0), c(1,0,0)), 
@@ -354,8 +357,19 @@ binary_nex_mcmc %>% plot
 
 ```{r echo=TRUE}
 ### Credible interval for selected parameters
-mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red', labels=n%>%names, cat.shift=-.2, reorder = F)
+mcmcplots::caterplot(binary_nex_jag, parms = c('p'), add=F, col='red', labels=n%>%names, cat.shift=-.2, reorder = F, main='Posterior distribution of true response rate')
 mcmcplots::caterplot(binary_exnex_jag2, parms = c('p'), add=T, cat.shift=0, labels.loc=F, reorder = F)
 mcmcplots::caterplot(binary_ex_jag, parms = c('p'), add=T, col='darkgreen', cat.shift=.2, labels.loc=F, reorder = F)
 legend(x=.35, y=1, lty=1, lwd=2, col=c('red', 'blue', 'darkgreen'), legend=c('nex', 'exnex', 'fully ex'))
+```
+
+
+## Credible interval for posterior predictive distribution of observed $\hat{p}_{FA}$
+
+```{r echo=TRUE}
+### Credible interval for selected parameters
+mcmcplots::caterplot(binary_nex_jag, parms = c('p.fa'), add=F, col='red', labels=n%>%names, cat.shift=-.2, reorder = F, main='Posterior predictive distribution of observed response rate at FA')
+mcmcplots::caterplot(binary_exnex_jag2, parms = c('p.fa'), add=T, cat.shift=0, labels.loc=F, reorder = F)
+mcmcplots::caterplot(binary_ex_jag, parms = c('p.fa'), add=T, col='darkgreen', cat.shift=.2, labels.loc=F, reorder = F)
+legend(x=.4, y=2.5, lty=1, lwd=2, col=c('red', 'blue', 'darkgreen'), legend=c('nex', 'exnex', 'fully ex'))
 ```
