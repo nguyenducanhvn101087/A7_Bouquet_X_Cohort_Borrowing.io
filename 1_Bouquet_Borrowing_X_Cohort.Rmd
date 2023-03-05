@@ -124,10 +124,11 @@ binary_exnex_model2 <- function() {
     }    
   }
 
-  # predictive part
+  # predictive part, not exactly the same as Appendix 5 in protocol but should be ~
   for (i in 1:Nstrata) {  
-    r_fa[i] ~ dbin(p[i], n_fa[i])
-    p.fa[i] <- r_fa[i]/n_fa[i]
+    # r_fa[i] ~ dbin(p[i], n_fa[i])
+    r_ex[i] ~ dbin(p[i], n_fa[i]-n[i])
+    p.fa[i] <- (r_ex[i]+r[i])/n_fa[i]
     p.success_fa[i]  <- step(p.fa[i]-p.cut)
   }
   
@@ -281,12 +282,14 @@ binary_exnex_model <- function() {
     r[i] ~ dbin(p[i],n[i])
   }
 
-  # predictive part
+  # predictive part, not exactly the same as Appendix 5 in protocol but should be ~
   for (i in 1:Nstrata) {  
-    r_fa[i] ~ dbin(p[i], n_fa[i])
-    p.fa[i] <- r_fa[i]/n_fa[i]
+    # r_fa[i] ~ dbin(p[i], n_fa[i])
+    r_ex[i] ~ dbin(p[i], n_fa[i]-n[i])
+    p.fa[i] <- (r_ex[i]+r[i])/n_fa[i]
     p.success_fa[i]  <- step(p.fa[i]-p.cut)
   }
+  
 } # end of binary_exnex_model
 
 write.model(binary_exnex_model, 'binary_exnex_model.bug')
